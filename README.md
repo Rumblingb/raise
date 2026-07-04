@@ -75,5 +75,10 @@ Without Ollama or Bee it still runs — every degraded path is labeled in the UI
       *actually* chose — smoke test asked for claude, router chose local-gemma
       ("trivial → local, $0"), card displayed `preference overridden by policy`.
       Cursor shows `absent` truthfully until installed.
-- [ ] Cursor worker adapter — Cursor as a fleet worker under the orchestrator (blocked on install)
+- [x] **Cursor worker adapter** (wired + verified 2026-07-04): Cursor installed (app + `cursor-agent`
+      CLI); the canvas dispatches headless Cursor jobs *into the generated artifact's directory*,
+      streams the output tail live, and when the job finishes the **drift sentinel re-audits
+      Cursor's edits against the approved tokens** — the fleet answers to the founder's grammar.
+      Verified: job lifecycle end-to-end; currently surfaces Cursor's real "Authentication
+      required" until the founder runs `cursor-agent login` (founder-only step, by design).
 - [ ] AgentPay spend surface: mandate → gesture → sandbox settle → receipt on canvas

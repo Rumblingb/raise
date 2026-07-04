@@ -446,8 +446,10 @@
         </div>`).join('');
       if (first) {
         const beeWorkers = workers.filter(w => w.kind === 'bee-assignee');
+        const cursor = workers.find(w => w.key === 'cursor');
         $('#worker-chips').innerHTML = '<button data-w="" class="sel">Bee routes</button>' +
-          beeWorkers.map(w => `<button data-w="${w.key}">${w.label}</button>`).join('');
+          beeWorkers.map(w => `<button data-w="${w.key}">${w.label}</button>`).join('') +
+          (cursor && cursor.presence !== 'absent' ? '<button data-w="cursor">Cursor</button>' : '');
         $$('#worker-chips button').forEach(b => b.onclick = () => {
           $$('#worker-chips button').forEach(x => x.classList.remove('sel'));
           b.classList.add('sel');
@@ -460,6 +462,7 @@
   $('#dispatch-btn').onclick = async () => {
     const text = $('#dispatch-text').value.trim();
     if (!text || $('#dispatch-btn').disabled) return;
+    if (chosenWorker === 'cursor') return dispatchToCursor(text);
     $('#dispatch-btn').disabled = true;
     $('#dispatch-btn').textContent = 'Routing…';
     try {
@@ -486,6 +489,55 @@
       $('#dispatch-btn').textContent = 'Dispatch →';
     }
   };
+
+  // ---------- cursor as a worker ----------
+  async function dispatchToCursor(text) {
+    if (!buildInfo) {
+      logline('<b>Cursor dispatch:</b> build first — Cursor works inside the generated artifact.');
+      return say('Build something first — Cursor works inside the generated artifact.');
+    }
+    $('#dispatch-btn').disabled = true;
+    $('#dispatch-btn').textContent = 'Cursor working…';
+    $('#routed').classList.remove('hidden');
+    try {
+      const res = await post('/api/cursor', { text, build: buildInfo.id });
+      if (!res.job) throw new Error(res.error || 'no job');
+      logline(`Cursor agent job <b>${res.job.id}</b> started inside <code>/builds/${buildInfo.id}/</code> — headless, full tool access, scoped to the artifact.`, true);
+      say('Cursor is on it.');
+      const poll = setInterval(async () => {
+        try {
+          const j = await api('/api/cursor/' + res.job.id);
+          $('#routed').innerHTML = `<b>⚡ Cursor job <code>${j.id}</code></b> — ${j.status}
+            <div class="lane-sub" style="margin-top:4px">${j.text}</div>
+            ${j.output_tail ? `<div class="lane-sub" style="margin-top:6px;white-space:pre-wrap;font-family:ui-monospace,monospace;font-size:11px">${j.output_tail.replace(/</g, '&lt;')}</div>` : ''}`;
+          if (j.status !== 'running') {
+            clearInterval(poll);
+            $('#dispatch-btn').disabled = false;
+            $('#dispatch-btn').textContent = 'Dispatch →';
+            logline(`Cursor job <b>${j.id}</b> → <b>${j.status}</b>${j.exit !== null ? ' (exit ' + j.exit + ')' : ''}.`);
+            if (j.status === 'done') {
+              $('#artifact').contentWindow.location.reload();
+              const report = await api('/api/drift?build=' + buildInfo.id).catch(() => null);
+              if (report) {
+                renderDrift(report);
+                logline(`Drift sentinel re-audited Cursor's work: <b>${report.violations.length} violation(s)</b> — even the fleet answers to the approved grammar.`);
+                say(report.violations.length
+                  ? `Cursor finished, but it drifted: ${report.violations.length} violations. Flagged.`
+                  : 'Cursor finished clean — the artifact still honors your grammar.');
+              }
+            } else {
+              say(`Cursor job ${j.status}. Details on the canvas.`);
+            }
+          }
+        } catch (e) { /* keep polling */ }
+      }, 2500);
+    } catch (e) {
+      $('#dispatch-btn').disabled = false;
+      $('#dispatch-btn').textContent = 'Dispatch →';
+      $('#routed').innerHTML = `<b>Cursor dispatch failed:</b> ${e.message}`;
+      logline(`<b>Cursor dispatch failed:</b> ${e.message}`);
+    }
+  }
 
   // ---------- build + drift ----------
   $('#build-btn').onclick = async () => {

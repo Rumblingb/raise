@@ -22,7 +22,7 @@ import { capabilities } from './lib/radar.mjs';
 import { build } from './lib/builder.mjs';
 import { lint, patch } from './lib/drift.mjs';
 import * as bee from './lib/bee.mjs';
-import { fleetStatus, dispatchWork } from './lib/fleet.mjs';
+import { fleetStatus, dispatchWork, startCursorJob, cursorJob } from './lib/fleet.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(ROOT, 'public');
@@ -135,6 +135,19 @@ const server = createServer(async (req, res) => {
       const result = dispatchWork(String(text), worker ? String(worker) : null);
       if (result.card) bee.remember(`dispatched card ${result.card.id} → ${result.card.assignee} (“${result.card.title.slice(0, 50)}”)`);
       return send(res, 200, result);
+    }
+    if (req.method === 'POST' && p === '/api/cursor') {
+      const { text, build: id } = await readBody(req);
+      if (!text || !String(text).trim()) return send(res, 400, { error: 'text required' });
+      const dir = buildDir(id);
+      if (!dir) return send(res, 400, { error: 'a valid build id is required — Cursor works inside the generated artifact' });
+      const result = startCursorJob(String(text), dir);
+      if (result.job) bee.remember(`cursor job ${result.job.id} started on build ${id}`);
+      return send(res, 200, result);
+    }
+    if (req.method === 'GET' && p.startsWith('/api/cursor/')) {
+      const j = cursorJob(p.split('/').pop());
+      return j ? send(res, 200, j) : send(res, 404, { error: 'unknown job' });
     }
     if (req.method === 'GET' && p === '/api/bee/board') {
       return send(res, 200, { available: bee.beeAvailable(), tasks: bee.boardPeek(6) });
