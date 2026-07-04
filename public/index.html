@@ -131,6 +131,28 @@
   .tstatus.rejected,.tstatus.expired{color:var(--flag); border-color:var(--flag)}
   .ticket .meta{color:var(--mut); font-size:12px; margin-top:6px}
 
+  .fleet{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:12px; max-width:1100px}
+  .worker{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:14px;
+    opacity:0; transform:translateY(12px); transition:all .5s ease}
+  .worker.on{opacity:1; transform:none}
+  .worker h4{font-size:14px; display:flex; align-items:center; gap:8px}
+  .worker .pres{width:9px;height:9px;border-radius:50%;flex:none}
+  .worker .pres.ok{background:var(--acc2)} .worker .pres.warn{background:#ffb02e} .worker .pres.off{background:var(--flag)}
+  .worker .counts{display:flex; gap:6px; margin:9px 0 4px; flex-wrap:wrap}
+  .worker .counts span{font-size:11px; border:1px solid var(--line); border-radius:999px; padding:2px 8px; color:var(--mut)}
+  .worker .counts span.hot{border-color:var(--acc); color:var(--acc)}
+  .worker .cur{font-size:12px; color:var(--mut); margin-top:6px; min-height:16px}
+  .worker .wnote{font-size:11px; color:var(--flag); margin-top:6px}
+  .composer{display:flex; gap:10px; margin-top:16px; max-width:1100px; flex-wrap:wrap}
+  .composer input{flex:1; min-width:280px; background:var(--panel); color:var(--ink); border:1px solid var(--line);
+    border-radius:14px; padding:12px 16px; font:inherit; outline:none}
+  .composer input:focus{border-color:var(--acc)}
+  .chips{display:flex; gap:6px; align-items:center; flex-wrap:wrap}
+  .chips button{padding:8px 13px; font-size:12px; border-radius:999px}
+  .chips button.sel{background:var(--acc); border-color:var(--acc); color:#fff}
+  .routed{max-width:1100px; margin-top:12px; background:var(--panel); border:1px solid var(--acc2);
+    border-radius:14px; padding:12px 16px; font-size:13px}
+  .routed code{background:var(--panel2); border-radius:6px; padding:1px 7px; font-size:12px}
   #log{list-style:none; display:flex; flex-direction:column; gap:6px; max-width:720px}
   #log li{font-size:13px; color:var(--mut); border-left:2px solid var(--line); padding:2px 0 2px 12px; animation:login .4s ease}
   #log li b{color:var(--ink); font-weight:600}
@@ -195,6 +217,18 @@
     <span class="lane-sub" id="pubnote">outward actions route through the founder's signed approval wall</span>
   </div>
   <div class="ticket hidden" id="ticket"></div>
+</section>
+
+<section class="lane" id="lane-fleet">
+  <div class="lane-head"><h2>4 · Fleet dispatch</h2>
+    <span class="lane-sub">Bee conducts every power tool the founder owns — board, status, and routing shown as they actually are <span id="fleet-src"></span></span></div>
+  <div class="fleet" id="fleet"></div>
+  <div class="composer" id="composer">
+    <input id="dispatch-text" placeholder="describe the follow-on work…" spellcheck="false">
+    <div class="chips" id="worker-chips"><button data-w="" class="sel">Bee routes</button></div>
+    <button class="primary" id="dispatch-btn">Dispatch →</button>
+  </div>
+  <div class="routed hidden" id="routed"></div>
 </section>
 
 <section class="lane" id="lane-log">
@@ -363,6 +397,8 @@
       logline(`Brief interpreted by <b>${b.brain}</b> → ${b.moods.length} visual hypotheses on the board. No code yet — redirect freely.` +
         (b.brain_note ? ` <i>(${b.brain_note})</i>` : ''));
       say(`Here's what I think you mean. ${board.moods.find(m => m.key === board.selected_mood).label} mood, ${board.motion.selected} motion, ${(board.components.find(c => c.primary) || {}).label} as the hero. Tap any card to redirect me.`);
+      loadFleet(true);
+      if (!fleetTimer) fleetTimer = setInterval(() => loadFleet(false), 6000);
     } catch (e) {
       $('#thinking-txt').textContent = 'interpretation failed: ' + e.message;
       $('#go').disabled = false;
@@ -386,6 +422,71 @@
     } catch (e) { /* radar is additive — never blocks the flow */ }
   }
 
+  // ---------- fleet dispatch ----------
+  let fleetTimer = null, chosenWorker = '';
+  function presClass(w) {
+    if (w.kind === 'external') return w.presence === 'absent' ? 'off' : 'warn';
+    return /available|ok|ready/i.test(w.presence) ? 'ok' : /unknown/i.test(w.presence) ? 'warn' : 'off';
+  }
+  async function loadFleet(first) {
+    try {
+      const { available, workers, source } = await api('/api/fleet');
+      $('#lane-fleet').classList.add('on');
+      $('#fleet-src').textContent = available ? `· ${source}` : '· Bee not present — fleet unavailable (not simulated)';
+      $('#fleet').innerHTML = workers.map(w => `
+        <div class="worker on">
+          <h4><span class="pres ${presClass(w)}"></span>${w.label}</h4>
+          <div class="counts">
+            ${w.board.active ? `<span class="hot">${w.board.active} active</span>` : ''}
+            <span>${w.board.queued} queued</span><span>${w.board.blocked} blocked</span><span>${w.board.done} done</span>
+          </div>
+          <div class="cur">${w.current ? '▸ ' + w.current : w.kind === 'external' ? '' : 'idle'}</div>
+          ${w.note ? `<div class="wnote">${w.note}</div>` : ''}
+          <div class="cur" style="min-height:0">${w.inbox ? 'inbox: ' + w.inbox : ''} · ${w.presence}</div>
+        </div>`).join('');
+      if (first) {
+        const beeWorkers = workers.filter(w => w.kind === 'bee-assignee');
+        $('#worker-chips').innerHTML = '<button data-w="" class="sel">Bee routes</button>' +
+          beeWorkers.map(w => `<button data-w="${w.key}">${w.label}</button>`).join('');
+        $$('#worker-chips button').forEach(b => b.onclick = () => {
+          $$('#worker-chips button').forEach(x => x.classList.remove('sel'));
+          b.classList.add('sel');
+          chosenWorker = b.dataset.w;
+        });
+        logline(`Fleet lane live: ${workers.length} power tools probed — ${workers.filter(w => presClass(w) === 'ok').length} available, Cursor ${workers.find(w => w.key === 'cursor')?.presence}.`);
+      }
+    } catch (e) { /* fleet is additive */ }
+  }
+  $('#dispatch-btn').onclick = async () => {
+    const text = $('#dispatch-text').value.trim();
+    if (!text || $('#dispatch-btn').disabled) return;
+    $('#dispatch-btn').disabled = true;
+    $('#dispatch-btn').textContent = 'Routing…';
+    try {
+      const res = await post('/api/dispatch', { text, worker: chosenWorker || null });
+      if (res.card) {
+        const c = res.card;
+        $('#routed').classList.remove('hidden');
+        $('#routed').innerHTML = `<b>📤 Card <code>${c.id}</code> → ${c.assignee}</b>
+          ${c.preferred ? (c.honored ? ' (preference honored)' : ` (you preferred ${c.preferred}; Bee's router chose ${c.assignee} — shown as it actually routed)`) : ''}
+          <div class="lane-sub" style="margin-top:4px">${c.title}</div>
+          <div class="lane-sub">status ${c.status}${c.model_tier ? ' · tier ' + c.model_tier : ''}${c.rationale ? ' · ' + c.rationale : ''} · lands in the worker's bee-inbox; it acts on its own pull cadence</div>`;
+        logline(`Dispatched <b>${c.id}</b> → <b>${c.assignee}</b> through Bee's own router${c.preferred && !c.honored ? ` (preference ${c.preferred} overridden by policy)` : ''}.`, true);
+        say(`Card routed to ${c.assignee}.`);
+        loadFleet(false);
+      } else {
+        $('#routed').classList.remove('hidden');
+        $('#routed').innerHTML = `<b>Dispatch unavailable:</b> ${res.error || res.note || 'unknown'}`;
+        logline(`<b>Dispatch:</b> ${res.error || res.note}`);
+      }
+    } catch (e) {
+      logline(`<b>Dispatch failed:</b> ${e.message}`);
+    } finally {
+      $('#dispatch-btn').disabled = false;
+      $('#dispatch-btn').textContent = 'Dispatch →';
+    }
+  };
+
   // ---------- build + drift ----------
   $('#build-btn').onclick = async () => {
     if (!board || $('#build-btn').disabled) return;
@@ -400,6 +501,7 @@
       $('#artifact').src = `/builds/${build.id}/`;
       $('#browser').classList.add('on');
       logline(`Background build <b>${build.id}</b> generated from approved tokens (mood ${build.mood}, ${build.motion}).`);
+      if (!$('#dispatch-text').value) $('#dispatch-text').value = `Iterate on museframe build ${build.id}: tighten the hero, add a social-proof strip, keep the approved tokens`;
       renderDrift(drift);
     } catch (e) {
       logline(`<b>Build failed:</b> ${e.message}`);

@@ -8,6 +8,8 @@
 //   GET  /api/ticket/:id    real ticket status (reflects the Clickey gesture)
 //   POST /api/gesture       pop the Clickey ✓/✗ overlay on the founder screen
 //   GET  /api/bee/board     read-only peek at Bee's task board
+//   GET  /api/fleet         the worker fleet as it actually is (board + status + probes)
+//   POST /api/dispatch      route work through Bee's own router to a worker inbox
 // Static: / → public, /builds/* → generated artifacts.
 // [HACKATHON: new work — written 2026-07-04 during RAISE]
 
@@ -20,6 +22,7 @@ import { capabilities } from './lib/radar.mjs';
 import { build } from './lib/builder.mjs';
 import { lint, patch } from './lib/drift.mjs';
 import * as bee from './lib/bee.mjs';
+import { fleetStatus, dispatchWork } from './lib/fleet.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(ROOT, 'public');
@@ -122,6 +125,16 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && p === '/api/gesture') {
       const { ticket } = await readBody(req);
       return send(res, 200, bee.summonGesture(String(ticket || '')));
+    }
+    if (req.method === 'GET' && p === '/api/fleet') {
+      return send(res, 200, fleetStatus());
+    }
+    if (req.method === 'POST' && p === '/api/dispatch') {
+      const { text, worker } = await readBody(req);
+      if (!text || !String(text).trim()) return send(res, 400, { error: 'text required' });
+      const result = dispatchWork(String(text), worker ? String(worker) : null);
+      if (result.card) bee.remember(`dispatched card ${result.card.id} → ${result.card.assignee} (“${result.card.title.slice(0, 50)}”)`);
+      return send(res, 200, result);
     }
     if (req.method === 'GET' && p === '/api/bee/board') {
       return send(res, 200, { available: bee.beeAvailable(), tasks: bee.boardPeek(6) });

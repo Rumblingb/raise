@@ -69,6 +69,11 @@ Without Ollama or Bee it still runs — every degraded path is labeled in the UI
 
 ## Next (event window)
 
-- [ ] Dispatch lane: Bee's worker fleet (claude / codex / hermes / **cursor**) as live canvas cards
-- [ ] Cursor worker adapter — Cursor as a fleet worker under the orchestrator
+- [x] **Dispatch lane** (verified 2026-07-04): Bee's worker fleet (Claude / Codex / Hermes /
+      Nemotron / local Gemma / Cursor) as live canvas cards read from the real board;
+      dispatch goes through Bee's **own router** and the canvas reports the route it
+      *actually* chose — smoke test asked for claude, router chose local-gemma
+      ("trivial → local, $0"), card displayed `preference overridden by policy`.
+      Cursor shows `absent` truthfully until installed.
+- [ ] Cursor worker adapter — Cursor as a fleet worker under the orchestrator (blocked on install)
 - [ ] AgentPay spend surface: mandate → gesture → sandbox settle → receipt on canvas
