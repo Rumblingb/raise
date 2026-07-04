@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Museframe — the AI shows you what it understood</title>
+<style>
+  :root { --radius: 999px; }
+  body[data-mood="nocturne"]{
+    --bg:#0a0b12; --panel:#12141f; --panel2:#191c2e; --ink:#eef0ff; --mut:#8b90b3;
+    --acc:#7c5cff; --acc2:#3be0c0; --line:#262a45; --flag:#ff4d6d;
+  }
+  body[data-mood="signal"]{
+    --bg:#070908; --panel:#101614; --panel2:#16201c; --ink:#eafff4; --mut:#7fa694;
+    --acc:#ffb02e; --acc2:#4be37a; --line:#1e2b26; --flag:#ff5c39;
+  }
+  body[data-mood="editorial"]{
+    --bg:#f2ede3; --panel:#faf7f0; --panel2:#efe9db; --ink:#221d14; --mut:#7a705d;
+    --acc:#b3402a; --acc2:#2a6b8f; --line:#ddd3bf; --flag:#b3402a;
+  }
+  body[data-mood="editorial"] h1, body[data-mood="editorial"] h2, body[data-mood="editorial"] .prev-title
+    { font-family: Georgia, 'Times New Roman', serif; }
+
+  *{box-sizing:border-box; margin:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:15px/1.55 'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    transition: background-color .7s ease, color .7s ease;
+    padding: 28px clamp(16px, 4vw, 48px) 80px;
+  }
+  header{display:flex; align-items:center; gap:14px; margin-bottom:26px; flex-wrap:wrap}
+  .logo{width:38px;height:38px;flex:none}
+  h1{font-size:22px; letter-spacing:-.02em}
+  .tag{color:var(--mut); font-size:13px}
+  .spacer{flex:1}
+  h2{font-size:12px; text-transform:uppercase; letter-spacing:.14em; color:var(--mut); margin-bottom:4px}
+  .lane{margin-top:34px; opacity:0; transform:translateY(14px); transition:opacity .6s ease, transform .6s ease}
+  .lane.on{opacity:1; transform:none}
+  .lane-head{display:flex; align-items:baseline; gap:12px; margin-bottom:14px}
+  .lane-sub{color:var(--mut); font-size:13px}
+
+  .promptbar{display:flex; gap:10px; max-width:860px}
+  .promptbar input{
+    flex:1; background:var(--panel); color:var(--ink); border:1px solid var(--line);
+    border-radius:14px; padding:14px 18px; font:inherit; outline:none;
+    transition:border-color .3s, background-color .7s;
+  }
+  .promptbar input:focus{border-color:var(--acc)}
+  button{
+    font:inherit; font-weight:600; cursor:pointer; border:1px solid var(--line);
+    background:var(--panel2); color:var(--ink); border-radius:14px; padding:12px 18px;
+    transition:all .3s ease;
+  }
+  button:hover{border-color:var(--acc)}
+  button.primary{background:var(--acc); border-color:var(--acc); color:#fff}
+  body[data-mood="editorial"] button.primary{color:#fff}
+  button.mic.listening{border-color:var(--flag); animation:pulse 1.1s infinite}
+  @keyframes pulse{50%{box-shadow:0 0 0 6px color-mix(in srgb, var(--flag) 25%, transparent)}}
+
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); gap:16px}
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:18px;
+    opacity:0; transform:translateY(16px) scale(.98);
+    transition:opacity .55s ease, transform .55s ease, background-color .7s, border-color .7s;
+  }
+  .card.on{opacity:1; transform:none}
+  .card h3{font-size:14px; margin-bottom:4px}
+  .card .why{color:var(--mut); font-size:13px; margin-bottom:12px; min-height:58px}
+  .chiplet{display:inline-block; font-size:11px; padding:2px 9px; border-radius:999px;
+    border:1px solid var(--line); color:var(--mut); margin-bottom:10px}
+
+  /* mood tiles */
+  .tiles{display:flex; gap:10px}
+  .tile{flex:1; border-radius:14px; padding:10px; cursor:pointer; border:2px solid transparent;
+    text-align:center; font-size:12px; font-weight:600; transition:all .3s}
+  .tile .dots{display:flex; gap:4px; justify-content:center; margin-bottom:6px}
+  .tile .d{width:14px;height:14px;border-radius:50%}
+  .tile.sel{border-color:var(--acc)}
+  .t-noc{background:#12141f;color:#eef0ff} .t-sig{background:#101614;color:#eafff4} .t-edi{background:#faf7f0;color:#221d14; border:2px solid #ddd3bf}
+  .t-edi.sel{border-color:var(--acc)}
+
+  /* motion card */
+  .motion-stage{height:64px; position:relative; background:var(--panel2); border-radius:12px; overflow:hidden; margin-bottom:10px}
+  .orb{width:14px;height:14px;border-radius:50%;background:var(--acc2);position:absolute;top:25px;left:8%;
+    animation:drift 4.5s ease-in-out infinite}
+  body[data-motion="reactive"] .orb{animation:jolt 1.2s cubic-bezier(.6,-0.4,.3,1.4) infinite}
+  @keyframes drift{0%,100%{left:8%;transform:scale(1)}50%{left:85%;transform:scale(1.25)}}
+  @keyframes jolt{0%,100%{left:8%;top:25px;transform:scale(1)}30%{left:60%;top:8px;transform:scale(1.7)}
+    55%{left:40%;top:40px;transform:scale(.8)}80%{left:85%;top:20px;transform:scale(1.4)}}
+  .seg{display:flex; border:1px solid var(--line); border-radius:999px; overflow:hidden; width:max-content}
+  .seg button{border:0; border-radius:0; padding:7px 16px; font-size:12px; background:transparent}
+  .seg button.sel{background:var(--acc); color:#fff}
+
+  /* component map + states */
+  svg text{fill:var(--ink); font:600 10px 'Inter',sans-serif}
+  .wire{display:flex; gap:10px}
+  .wstate{flex:1; background:var(--panel2); border-radius:12px; padding:10px; font-size:11px; color:var(--mut)}
+  .wbox{background:var(--bg); border:1px solid var(--line); border-radius:8px; height:74px; margin-bottom:6px;
+    display:flex; align-items:center; justify-content:center; overflow:hidden}
+  .flatline{width:70%; height:2px; background:var(--mut); opacity:.5}
+  .minibars{display:flex; align-items:flex-end; gap:2px; height:40px}
+  .minibars i{width:4px; background:var(--acc); border-radius:2px; animation:mb 1s ease-in-out infinite alternate}
+  .minibars i:nth-child(2n){background:var(--acc2); animation-delay:.15s}
+  .minibars i:nth-child(3n){animation-delay:.3s}
+  @keyframes mb{from{height:15%}to{height:100%}}
+
+  /* radar */
+  .radar-wrap{display:flex; gap:16px; flex-wrap:wrap; align-items:stretch}
+  .radar-svg{flex:none}
+  .blip{animation:blipfade 2.4s ease-in-out infinite}
+  @keyframes blipfade{0%,100%{opacity:.5}50%{opacity:1}}
+  .caps{flex:1; min-width:260px; display:flex; flex-direction:column; gap:10px}
+  .cap{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px 14px;
+    font-size:13px; display:flex; gap:10px; align-items:center; opacity:0; transform:translateX(14px);
+    transition:all .5s ease}
+  .cap.on{opacity:1; transform:none}
+  .cap .dot{width:9px;height:9px;border-radius:50%;background:var(--acc2);flex:none}
+  .cap.plan{border-color:var(--acc)}
+  .cap .badge{margin-left:auto; font-size:10px; padding:2px 8px; border-radius:999px;
+    background:var(--acc); color:#fff; flex:none}
+  .cap small{color:var(--mut); display:block}
+
+  /* build + preview */
+  .progress{height:6px; background:var(--panel2); border-radius:999px; overflow:hidden; max-width:520px; margin-bottom:16px}
+  .progress i{display:block; height:100%; width:0; border-radius:999px;
+    background:linear-gradient(90deg, var(--acc), var(--acc2)); transition:width 2.4s ease}
+  .browser{background:var(--panel); border:1px solid var(--line); border-radius:18px; overflow:hidden; max-width:760px;
+    opacity:0; transform:translateY(16px); transition:all .6s ease}
+  .browser.on{opacity:1; transform:none}
+  .chrome{display:flex; gap:6px; padding:11px 14px; border-bottom:1px solid var(--line)}
+  .chrome i{width:10px;height:10px;border-radius:50%;background:var(--line)}
+  .prev-body{padding:26px 26px 30px; text-align:center}
+  .prev-title{font-size:26px; font-weight:700; letter-spacing:-.02em}
+  .prev-sub{color:var(--mut); font-size:13px; margin:4px 0 16px}
+  canvas#viz{width:100%; height:110px; display:block; border-radius:12px; background:var(--panel2)}
+  .cta-row{margin-top:18px; position:relative; display:inline-block}
+  #cta{padding:12px 30px}
+  #cta.drifted{font-family:Georgia,serif; font-weight:400; border-radius:4px; background:#c9a13b; color:#221d14;
+    border-color:#c9a13b; outline:2px dashed var(--flag); outline-offset:5px}
+  #cta.patched{border-radius:999px; background:linear-gradient(90deg,var(--acc),var(--acc2)); color:#fff; border-color:transparent; outline:none}
+  .flagbadge{position:absolute; top:-14px; right:-24px; background:var(--flag); color:#fff; font-size:10px;
+    font-weight:700; padding:2px 8px; border-radius:999px; animation:blipfade 1.6s infinite}
+
+  .driftcard{max-width:760px; margin-top:14px; background:var(--panel); border:1px solid var(--flag);
+    border-radius:16px; padding:16px 18px; opacity:0; transform:translateY(12px); transition:all .5s ease}
+  .driftcard.on{opacity:1; transform:none}
+  .driftcard.done{border-color:var(--acc2)}
+  .ba{display:flex; gap:8px; margin:10px 0 12px; flex-wrap:wrap}
+  .ba span{font-size:12px; border:1px solid var(--line); padding:4px 10px; border-radius:999px; color:var(--mut)}
+  .ba span.bad{border-color:var(--flag); color:var(--flag)}
+  .ba span.good{border-color:var(--acc2); color:var(--acc2)}
+
+  /* changelog */
+  #log{list-style:none; display:flex; flex-direction:column; gap:6px; max-width:640px}
+  #log li{font-size:13px; color:var(--mut); border-left:2px solid var(--line); padding:2px 0 2px 12px;
+    animation:login .4s ease}
+  #log li b{color:var(--ink); font-weight:600}
+  #log li.user{border-left-color:var(--acc)}
+  @keyframes login{from{opacity:0; transform:translateX(-8px)}to{opacity:1}}
+  .hidden{display:none}
+  footer{margin-top:48px; color:var(--mut); font-size:12px; max-width:720px}
+</style>
+</head>
+<body data-mood="nocturne" data-motion="reactive">
+
+<header>
+  <svg class="logo" viewBox="0 0 40 40" fill="none">
+    <rect x="2" y="2" width="36" height="36" rx="11" stroke="var(--acc)" stroke-width="2.5"/>
+    <circle cx="15" cy="16" r="4.5" fill="var(--acc2)"/>
+    <path d="M8 30 L17 21 L23 26 L32 15" stroke="var(--acc)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <div>
+    <h1>Museframe</h1>
+    <div class="tag">The AI shows you what it understood — before it builds.</div>
+  </div>
+  <div class="spacer"></div>
+  <button id="brief" title="The agent narrates its current state">🔊 Voice briefing</button>
+</header>
+
+<section id="stage0">
+  <h2>Brief the agent</h2>
+  <p class="lane-sub" style="margin-bottom:12px">Say it rough. The agent answers in media, not paragraphs.</p>
+  <div class="promptbar">
+    <input id="idea" value="A launch page + mini app for an AI music visualizer" spellcheck="false">
+    <button class="mic" id="mic" title="Speak your brief">🎙</button>
+    <button class="primary" id="go">Interpret →</button>
+  </div>
+</section>
+
+<section class="lane" id="lane-understand">
+  <div class="lane-head"><h2>1 · Understanding board</h2>
+    <span class="lane-sub">“This is what I think you mean.” Tap anything to redirect me — <b>before</b> a line of code exists.</span></div>
+  <div class="grid">
+
+    <div class="card" id="card-mood">
+      <span class="chiplet">visual hypothesis</span>
+      <h3>Mood</h3>
+      <p class="why" id="mood-why">I read “music visualizer” as nocturnal and luminous — an instrument, not a brochure. Dark stage; light behaves like signal.</p>
+      <div class="tiles">
+        <div class="tile t-noc sel" data-m="nocturne"><div class="dots"><i class="d" style="background:#7c5cff"></i><i class="d" style="background:#3be0c0"></i><i class="d" style="background:#12141f;border:1px solid #333"></i></div>Nocturne</div>
+        <div class="tile t-sig" data-m="signal"><div class="dots"><i class="d" style="background:#ffb02e"></i><i class="d" style="background:#4be37a"></i><i class="d" style="background:#101614;border:1px solid #333"></i></div>Signal</div>
+        <div class="tile t-edi" data-m="editorial"><div class="dots"><i class="d" style="background:#b3402a"></i><i class="d" style="background:#2a6b8f"></i><i class="d" style="background:#f2ede3;border:1px solid #ccc"></i></div>Editorial</div>
+      </div>
+    </div>
+
+    <div class="card" id="card-motion">
+      <span class="chiplet">interaction grammar</span>
+      <h3>Motion</h3>
+      <p class="why">Motion is the product here. I propose <b>reactive</b> — the interface flinches with the audio. Flip it if you want calm.</p>
+      <div class="motion-stage"><div class="orb"></div></div>
+      <div class="seg">
+        <button data-mo="calm">calm</button>
+        <button data-mo="reactive" class="sel">reactive</button>
+      </div>
+    </div>
+
+    <div class="card" id="card-map">
+      <span class="chiplet">structure</span>
+      <h3>Component map</h3>
+      <p class="why">Three surfaces, one spine. The visualizer is the hero, not a feature below the fold.</p>
+      <svg viewBox="0 0 260 110" width="100%">
+        <rect x="95" y="6" width="70" height="24" rx="8" fill="none" stroke="var(--acc)" stroke-width="1.5"/>
+        <text x="130" y="21" text-anchor="middle">App</text>
+        <path d="M130 30 V44 M130 44 H40 M130 44 H220 M40 44 V58 M130 44 V58 M220 44 V58" stroke="var(--line)" stroke-width="1.5" fill="none"/>
+        <rect x="8" y="58" width="64" height="24" rx="8" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="40" y="73" text-anchor="middle">Hero</text>
+        <rect x="93" y="58" width="74" height="24" rx="8" fill="var(--acc2)" fill-opacity=".15" stroke="var(--acc2)" stroke-width="1.5"/>
+        <text x="130" y="73" text-anchor="middle">Visualizer</text>
+        <rect x="186" y="58" width="68" height="24" rx="8" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="220" y="73" text-anchor="middle">Waitlist</text>
+        <text x="130" y="102" text-anchor="middle" style="fill:var(--mut);font-weight:400">live canvas = primary surface</text>
+      </svg>
+    </div>
+
+    <div class="card" id="card-states">
+      <span class="chiplet">what I think you mean</span>
+      <h3>States</h3>
+      <p class="why">Two truths of this product: silent and listening. The idle state must already promise the live one.</p>
+      <div class="wire">
+        <div class="wstate"><div class="wbox"><div class="flatline"></div></div>idle — a held breath</div>
+        <div class="wstate"><div class="wbox"><div class="minibars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>live — sound made visible</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="lane" id="lane-radar">
+  <div class="lane-head"><h2>2 · Capability radar</h2>
+    <span class="lane-sub">What the agent can reach for <i>right now</i> — and how a fresh capability just changed the plan.</span></div>
+  <div class="radar-wrap">
+    <svg class="radar-svg" viewBox="0 0 180 180" width="180">
+      <circle cx="90" cy="90" r="84" fill="none" stroke="var(--line)"/>
+      <circle cx="90" cy="90" r="56" fill="none" stroke="var(--line)"/>
+      <circle cx="90" cy="90" r="28" fill="none" stroke="var(--line)"/>
+      <line x1="90" y1="6" x2="90" y2="174" stroke="var(--line)"/>
+      <line x1="6" y1="90" x2="174" y2="90" stroke="var(--line)"/>
+      <circle class="blip" cx="118" cy="52" r="5" fill="var(--acc)"/>
+      <circle class="blip" cx="60" cy="120" r="5" fill="var(--acc2)" style="animation-delay:.5s"/>
+      <circle class="blip" cx="132" cy="118" r="5" fill="var(--acc2)" style="animation-delay:1s"/>
+      <circle cx="90" cy="90" r="3.5" fill="var(--ink)"/>
+    </svg>
+    <div class="caps">
+      <div class="cap plan" id="cap1"><span class="dot" style="background:var(--acc)"></span>
+        <span><b>WebAudio analyser</b> — MCP audio-analysis server updated to v2 this week.<small>Adopted → real-time FFT instead of precomputed frames. This decision reshaped the whole build.</small></span>
+        <span class="badge">changed the plan</span></div>
+      <div class="cap" id="cap2"><span class="dot"></span>
+        <span><b>Gemini persistent agent</b> — state survives the whole build session.<small>Used as the background builder; the canvas above is its expression layer.</small></span></div>
+      <div class="cap" id="cap3"><span class="dot"></span>
+        <span><b>Video generation credits</b> — partner track, active.<small>Held in reserve for the launch-page hero loop. Not adopted yet — shown so you know I know.</small></span></div>
+    </div>
+  </div>
+</section>
+
+<section class="lane" id="lane-build">
+  <div class="lane-head"><h2>3 · Background build + drift sentinel</h2>
+    <span class="lane-sub">Code happens off-stage. What surfaces is the product — and any place it betrayed the grammar you approved.</span></div>
+  <div class="progress"><i id="pbar"></i></div>
+
+  <div class="browser" id="browser">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="prev-body">
+      <div class="prev-title">PULSAR</div>
+      <div class="prev-sub">see your sound</div>
+      <canvas id="viz" width="700" height="110"></canvas>
+      <div class="cta-row">
+        <button id="cta" class="drifted">Join the waitlist</button>
+        <span class="flagbadge" id="flag">drift</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="driftcard" id="driftcard">
+    <b>⚠ Drift detected — 1 violation</b>
+    <p class="lane-sub" style="margin-top:4px" id="drift-why">The waitlist button came back editorial: serif type, 4px corners, an off-system gold. The product you approved is operational — pill geometry, system accent, no serifs on controls.</p>
+    <div class="ba">
+      <span class="bad">before · serif · 4px radius · #c9a13b</span>
+      <span>→</span>
+      <span class="good">after · Inter 600 · pill · system accent</span>
+    </div>
+    <button class="primary" id="patch">Patch it ✦</button>
+  </div>
+</section>
+
+<section class="lane" id="lane-log">
+  <div class="lane-head"><h2>Visual changelog</h2><span class="lane-sub">every decision, human-readable</span></div>
+  <ol id="log"></ol>
+</section>
+
+<footer>
+  <b>The flip:</b> Cursor and Codex make the AI's <i>work</i> legible as text. Museframe makes the AI's <i>understanding</i> legible as media —
+  and lets you correct that understanding before the build, not after it. Coding is a background process; the canvas is the conversation.
+</footer>
+
+<script>
+(function(){
+  const $ = s => document.querySelector(s);
+  const $$ = s => [...document.querySelectorAll(s)];
+  let t0 = null;
+
+  // ---------- changelog ----------
+  function stamp(){
+    if(t0===null) return "00:00";
+    const s = Math.floor((performance.now()-t0)/1000);
+    return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
+  }
+  function logline(html, user){
+    const li = document.createElement("li");
+    if(user) li.className = "user";
+    li.innerHTML = "<b>"+stamp()+"</b> · "+html;
+    $("#log").prepend(li);
+  }
+
+  // ---------- voice ----------
+  function say(text){
+    try{
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.04;
+      speechSynthesis.speak(u);
+    }catch(e){/* voice unavailable — canvas still tells the story */}
+  }
+  $("#brief").onclick = () => {
+    const mood = document.body.dataset.mood, motion = document.body.dataset.motion;
+    const patched = $("#cta").classList.contains("patched");
+    say(t0===null
+      ? "I'm ready. Give me a rough idea and I'll show you what I understood, as images, motion, and structure."
+      : `Current read: ${mood} mood, ${motion} motion grammar. Build is live. ${patched
+          ? "One drift was found and patched. The canvas is coherent."
+          : "One drift is flagged on the waitlist button, waiting on your call."}`);
+  };
+
+  // ---------- mic input ----------
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  $("#mic").onclick = () => {
+    if(!SR){ say("Voice input isn't available in this frame, but you can type the brief."); return; }
+    const rec = new SR();
+    $("#mic").classList.add("listening");
+    rec.onresult = e => { $("#idea").value = e.results[0][0].transcript; };
+    rec.onend = () => $("#mic").classList.remove("listening");
+    rec.onerror = () => $("#mic").classList.remove("listening");
+    rec.start();
+  };
+
+  // ---------- staged reveal ----------
+  function reveal(sel, delay){ setTimeout(()=>$(sel).classList.add("on"), delay); }
+  let started = false;
+  function interpret(){
+    if(started) return; started = true;
+    t0 = performance.now();
+    $("#go").textContent = "Interpreting…"; $("#go").disabled = true;
+    reveal("#lane-understand", 100);
+    ["#card-mood","#card-motion","#card-map","#card-states"].forEach((c,i)=>reveal(c, 300+i*260));
+    setTimeout(()=>logline("Brief interpreted → <b>4 visual hypotheses</b> on the board. No code yet — redirect freely."), 400);
+    setTimeout(()=>say("Here's what I think you mean. Nocturnal, reactive, visualizer as the hero. Tap any card to redirect me."), 600);
+
+    reveal("#lane-radar", 1900);
+    ["#cap1","#cap2","#cap3"].forEach((c,i)=>reveal(c, 2200+i*300));
+    setTimeout(()=>logline("Capability radar: <b>WebAudio analyser v2</b> discovered via MCP registry — plan changed to real-time FFT."), 2400);
+
+    reveal("#lane-build", 3600);
+    setTimeout(()=>{ $("#pbar").style.width = "100%"; }, 3800);
+    setTimeout(()=>{
+      $("#browser").classList.add("on");
+      startViz();
+      logline("Background build complete → live preview mounted.");
+    }, 6300);
+    setTimeout(()=>{
+      $("#driftcard").classList.add("on");
+      logline("<b>Drift sentinel:</b> waitlist button violates approved grammar (serif / 4px / off-system gold). 1 flag raised.");
+      say("Build done. One thing drifted: the waitlist button went editorial. I flagged it — your call.");
+    }, 7000);
+    reveal("#lane-log", 500);
+  }
+  $("#go").onclick = interpret;
+  $("#idea").addEventListener("keydown", e => { if(e.key==="Enter") interpret(); });
+
+  // ---------- mood redirect (design tokens propagate everywhere) ----------
+  const moodWhy = {
+    nocturne: "I read “music visualizer” as nocturnal and luminous — an instrument, not a brochure. Dark stage; light behaves like signal.",
+    signal:   "Redirected: festival energy. Amber signal on near-black, phosphor green as the live channel. Louder, warmer, still operational.",
+    editorial:"Redirected: the product told as a story. Paper, ink, one decisive red. Note how far one intent-tap re-themes the entire canvas."
+  };
+  $$(".tile").forEach(tile => tile.onclick = () => {
+    $$(".tile").forEach(t=>t.classList.remove("sel"));
+    tile.classList.add("sel");
+    const m = tile.dataset.m;
+    document.body.dataset.mood = m;
+    $("#mood-why").textContent = moodWhy[m];
+    logline("You redirected <b>mood → "+m+"</b>. Design tokens propagated across the whole canvas — zero re-prompting.", true);
+  });
+
+  // ---------- motion redirect ----------
+  $$(".seg button").forEach(b => b.onclick = () => {
+    $$(".seg button").forEach(x=>x.classList.remove("sel"));
+    b.classList.add("sel");
+    document.body.dataset.motion = b.dataset.mo;
+    logline("You redirected <b>motion → "+b.dataset.mo+"</b>. The visualizer and grammar demo now move accordingly.", true);
+  });
+
+  // ---------- drift patch ----------
+  $("#patch").onclick = () => {
+    const cta = $("#cta");
+    if(cta.classList.contains("patched")) return;
+    cta.classList.remove("drifted"); cta.classList.add("patched");
+    $("#flag").remove();
+    const dc = $("#driftcard");
+    dc.classList.add("done");
+    dc.innerHTML = "<b style='color:var(--acc2)'>✓ Patched</b><p class='lane-sub' style='margin-top:4px'>Button reconciled to the approved grammar. Shown as a live morph — not a diff you have to imagine.</p>";
+    logline("Drift <b>patched</b>: button morphed to pill / Inter / system accent. Canvas coherent.", true);
+    say("Patched. The canvas is coherent again.");
+  };
+
+  // ---------- the built product: live visualizer ----------
+  let vizOn = false;
+  function startViz(){
+    if(vizOn) return; vizOn = true;
+    const cv = $("#viz"), ctx = cv.getContext("2d");
+    const N = 56;
+    const seeds = Array.from({length:N}, (_,i)=>Math.random()*7);
+    function frame(t){
+      const st = getComputedStyle(document.body);
+      const acc = st.getPropertyValue("--acc").trim();
+      const acc2 = st.getPropertyValue("--acc2").trim();
+      const reactive = document.body.dataset.motion === "reactive";
+      ctx.clearRect(0,0,cv.width,cv.height);
+      const bw = cv.width/N;
+      for(let i=0;i<N;i++){
+        const base = Math.sin(t/(reactive?420:1100) + i*0.32 + seeds[i])*0.5+0.5;
+        const spike = reactive ? Math.max(0, Math.sin(t/130 + seeds[i]*9))*0.45 : 0.06;
+        const h = Math.max(4, (base*0.55 + spike) * cv.height*0.92);
+        ctx.fillStyle = i%6===0 ? acc2 : acc;
+        ctx.globalAlpha = 0.35 + base*0.65;
+        const x = i*bw+1.5, y = cv.height-h;
+        ctx.beginPath();
+        ctx.roundRect(x, y, bw-3, h, 3);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+})();
+</script>
+</body>
+</html>
