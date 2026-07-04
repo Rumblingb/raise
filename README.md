@@ -81,4 +81,9 @@ Without Ollama or Bee it still runs — every degraded path is labeled in the UI
       Cursor's edits against the approved tokens** — the fleet answers to the founder's grammar.
       Verified: job lifecycle end-to-end; currently surfaces Cursor's real "Authentication
       required" until the founder runs `cursor-agent login` (founder-only step, by design).
-- [ ] AgentPay spend surface: mandate → gesture → sandbox settle → receipt on canvas
+- [x] **AgentPay spend surface** (verified 2026-07-04): the build can buy what it needs —
+      Bee's 9-check guard → signed **sandbox** mandate on the founder wall → ✓ gesture →
+      sandbox settle. Verified live: $3 mandate staged signed (5 guard checks incl. the
+      fund-exec gate); $24 blocked by Bee's own daily cap; settle before approval refused
+      ("approval proof is invalid"). The harness hardcodes sandbox; live rails stay
+      founder-territory inside Bee.
