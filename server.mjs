@@ -149,6 +149,26 @@ const server = createServer(async (req, res) => {
       const j = cursorJob(p.split('/').pop());
       return j ? send(res, 200, j) : send(res, 404, { error: 'unknown job' });
     }
+    if (req.method === 'POST' && p === '/api/spend') {
+      const { amount, merchant, intent } = await readBody(req);
+      if (!merchant || !Number(amount)) return send(res, 400, { error: 'amount and merchant required' });
+      const result = bee.stageMandate(amount, merchant, intent);
+      if (result.mandate) bee.remember(`sandbox mandate ${result.mandate.id} staged: $${result.mandate.amount} → ${result.mandate.merchant}`);
+      return send(res, 200, result);
+    }
+    if (req.method === 'GET' && p.startsWith('/api/mandate/')) {
+      const m = bee.mandateStatus(p.split('/').pop());
+      return m ? send(res, 200, m) : send(res, 404, { error: 'unknown mandate' });
+    }
+    if (req.method === 'POST' && p === '/api/settle') {
+      const { mandate } = await readBody(req);
+      const m = bee.mandateStatus(String(mandate || ''));
+      if (!m) return send(res, 404, { error: 'unknown mandate' });
+      if (m.mode !== 'sandbox') return send(res, 403, { error: 'harness settles sandbox mandates only' });
+      const result = bee.settleSandbox(m.id);
+      if (result.ok) bee.remember(`sandbox settlement executed for ${m.id}`);
+      return send(res, 200, { ...result, mandate: bee.mandateStatus(m.id) });
+    }
     if (req.method === 'GET' && p === '/api/bee/board') {
       return send(res, 200, { available: bee.beeAvailable(), tasks: bee.boardPeek(6) });
     }

@@ -231,6 +231,18 @@
   <div class="routed hidden" id="routed"></div>
 </section>
 
+<section class="lane" id="lane-spend">
+  <div class="lane-head"><h2>5 · Spend (AgentPay · sandbox)</h2>
+    <span class="lane-sub">the build can buy what it needs — through Bee's 9-check guard, a signed mandate on the founder wall, and a ✓ gesture. Sandbox rail only from this canvas; Bee never auto-pays.</span></div>
+  <div class="composer">
+    <input id="spend-amt" style="max-width:110px; min-width:110px" value="3" inputmode="decimal" aria-label="amount USD">
+    <input id="spend-merchant" style="max-width:220px; min-width:180px" value="stockphoto.example" aria-label="merchant">
+    <input id="spend-intent" placeholder="what is this for…" value="hero image license for the launch page" aria-label="intent">
+    <button class="primary" id="spend-btn">Guard + stage mandate →</button>
+  </div>
+  <div class="routed hidden" id="mandate-panel"></div>
+</section>
+
 <section class="lane" id="lane-log">
   <div class="lane-head"><h2>Visual changelog</h2><span class="lane-sub">every decision, human-readable</span></div>
   <ol id="log"></ol>
@@ -399,6 +411,7 @@
       say(`Here's what I think you mean. ${board.moods.find(m => m.key === board.selected_mood).label} mood, ${board.motion.selected} motion, ${(board.components.find(c => c.primary) || {}).label} as the hero. Tap any card to redirect me.`);
       loadFleet(true);
       if (!fleetTimer) fleetTimer = setInterval(() => loadFleet(false), 6000);
+      $('#lane-spend').classList.add('on');
     } catch (e) {
       $('#thinking-txt').textContent = 'interpretation failed: ' + e.message;
       $('#go').disabled = false;
@@ -487,6 +500,80 @@
     } finally {
       $('#dispatch-btn').disabled = false;
       $('#dispatch-btn').textContent = 'Dispatch →';
+    }
+  };
+
+  // ---------- spend via AgentPay (sandbox) ----------
+  let mandateId = null, mandateTimer = null;
+  function renderMandate(m, checks) {
+    const exp = m.expires_at ? Math.max(0, m.expires_at - Math.floor(Date.now() / 1000)) : null;
+    $('#mandate-panel').classList.remove('hidden');
+    $('#mandate-panel').innerHTML = `
+      <b>💳 Mandate <code>${m.id}</code></b>
+      <span class="tstatus ${m.status}">${m.status}${m.approval_method ? ' · via ' + m.approval_method : ''}</span>
+      <div class="lane-sub" style="margin-top:4px">$${m.amount} ${m.currency} → ${m.merchant} · rail ${m.rail} · <b>${m.mode}</b> · signed ${m.sig} · expires in ${Math.floor(exp / 60)}m</div>
+      ${checks && checks.length ? `<div class="lane-sub" style="margin-top:6px">guard: ${checks.map(c => '✓ ' + c).join(' · ')}</div>` : ''}
+      <div class="pubrow" style="margin-top:10px">
+        ${m.status === 'proposed' ? `<button id="mandate-gesture">Summon founder gesture (Clickey) →</button>` : ''}
+        ${m.status === 'approved' ? `<button class="primary" id="settle-btn">Sandbox settle →</button>` : ''}
+      </div>`;
+    const g = $('#mandate-gesture');
+    if (g) g.onclick = async () => {
+      g.disabled = true;
+      const r = await post('/api/gesture', { ticket: m.id }).catch(e => ({ ok: false, reason: e.message }));
+      logline(r.ok ? 'Clickey gesture pane summoned for the payment mandate — 60-second window.' : `Gesture summon: ${r.reason || r.out || 'declined'}`);
+      if (r.ok) say('Payment approval is up. Draw a tick to approve.');
+      setTimeout(() => { g.disabled = false; }, 5000);
+    };
+    const s = $('#settle-btn');
+    if (s) s.onclick = async () => {
+      s.disabled = true;
+      const r = await post('/api/settle', { mandate: m.id }).catch(e => ({ ok: false, reason: e.message }));
+      logline(r.ok
+        ? `<b>Sandbox settlement executed</b> for ${m.id} — receipt in Bee's ledger. No real funds moved; live rails stay founder-territory.`
+        : `Settle: ${r.reason || r.out || 'refused'}`, true);
+      say(r.ok ? 'Settled in the sandbox. Receipt logged.' : 'Settlement refused — details on the canvas.');
+      if (r.mandate) renderMandate(r.mandate);
+    };
+  }
+  async function pollMandate() {
+    try {
+      const m = await api('/api/mandate/' + mandateId);
+      renderMandate(m);
+      if (m.status !== 'proposed') {
+        clearInterval(mandateTimer); mandateTimer = null;
+        logline(`Mandate <b>${mandateId}</b> → <b>${m.status}</b>${m.approval_method ? ` (founder gesture via ${m.approval_method})` : ''}.`, true);
+        if (m.status === 'approved') say('Payment approved. You can settle it in the sandbox.');
+      }
+    } catch (e) { /* keep polling */ }
+  }
+  $('#spend-btn').onclick = async () => {
+    if ($('#spend-btn').disabled) return;
+    $('#spend-btn').disabled = true;
+    try {
+      const res = await post('/api/spend', {
+        amount: parseFloat($('#spend-amt').value) || 0,
+        merchant: $('#spend-merchant').value.trim(),
+        intent: $('#spend-intent').value.trim() + (buildInfo ? ` (build ${buildInfo.id})` : ''),
+      });
+      if (res.blocked) {
+        $('#mandate-panel').classList.remove('hidden');
+        $('#mandate-panel').innerHTML = `<b>⛔ Guard blocked the mandate:</b> ${res.blocked}`;
+        logline(`<b>Guard blocked</b> the spend: ${res.blocked} — Bee's own checks, not ours.`);
+        say(`The guard blocked that: ${res.blocked}`);
+      } else if (res.mandate) {
+        mandateId = res.mandate.id;
+        renderMandate(res.mandate, res.checks);
+        logline(`Payment mandate <b>${res.mandate.id}</b> staged (sandbox, signed) after ${res.checks.length} guard checks — on the founder wall, awaiting the ✓ gesture. Bee never auto-pays.`, true);
+        say('Mandate staged. It needs your gesture before anything settles.');
+        if (!mandateTimer) mandateTimer = setInterval(pollMandate, 2000);
+      } else {
+        logline(`<b>Spend:</b> ${res.error || res.note || 'unavailable'}`);
+      }
+    } catch (e) {
+      logline(`<b>Spend failed:</b> ${e.message}`);
+    } finally {
+      $('#spend-btn').disabled = false;
     }
   };
 
