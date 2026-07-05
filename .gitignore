@@ -1,3 +1,5 @@
 workspace/
 node_modules/
 .DS_Store
+demo/*.mov
+demo/*.webm
