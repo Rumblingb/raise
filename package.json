@@ -4,7 +4,8 @@
   "description": "The AI shows you what it understood — before it builds. Visual-first agent harness (RAISE Summit Hackathon 2026).",
   "type": "module",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "verify": "node scripts/verify-arc.mjs"
   },
   "engines": { "node": ">=18" },
   "license": "MIT"

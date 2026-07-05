@@ -59,7 +59,10 @@ and when agents can also *act* (publish, spend, dispatch), the trust gap gets da
 
 ```bash
 node server.mjs          # http://localhost:8787 — zero dependencies, Node ≥ 18
+npm run verify           # pre-demo arc check (all API gates)
 ```
+
+**Hackathon submission:** see [SUBMISSION.md](SUBMISSION.md) for copy-paste fields and judge quickstart.
 
 Optional environment: `MUSEFRAME_BRAIN=local` (skip LLM), `MUSEFRAME_MODEL`,
 `MUSEFRAME_OLLAMA`, `MUSEFRAME_BEE=off` (force standalone), `PORT`.

@@ -173,7 +173,8 @@ const server = createServer(async (req, res) => {
       return send(res, 200, { available: bee.beeAvailable(), tasks: bee.boardPeek(6) });
     }
     if (req.method === 'GET' && p === '/api/health') {
-      return send(res, 200, { ok: true, bee: bee.beeAvailable(), builds: BUILDS });
+      const cursor = fleetStatus().workers.find(w => w.key === 'cursor');
+      return send(res, 200, { ok: true, bee: bee.beeAvailable(), builds: BUILDS, cursor: cursor ? { presence: cursor.presence, note: cursor.note } : null });
     }
     if (req.method === 'GET' && p.startsWith('/builds/')) {
       return serveStatic(res, BUILDS, p.slice('/builds/'.length) || 'nope');
@@ -187,7 +188,8 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`museframe harness → http://localhost:${PORT}  (bee: ${bee.beeAvailable() ? 'connected' : 'standalone'})`);
-  warmBrain();
+  const warm = await warmBrain();
+  console.log(warm.warmed ? `brain warmed: ${warm.model}` : `brain warm skipped: ${warm.reason}`);
 });

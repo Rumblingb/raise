@@ -64,8 +64,10 @@ mandates, always-on screen ownership, promotion of Fable as Bee's routing brain.
 
 - [ ] Join event Discord; confirm remote registration + team entry
 - [ ] Cursor credits form (tab already open) — $300/dev
+- [ ] **`cursor-agent login`** — one interactive step; unlocks Cursor fleet worker in demo
+- [ ] `node scripts/verify-arc.mjs` — all API gates green before recording
 - [ ] Record **1-minute demo video** (script below), upload to YouTube/Loom
-- [ ] Submit at cerebralvalley.ai/e/raise-summit-hackathon/hackathon/submit before **12:00 Sun**
+- [ ] Paste video URL into [SUBMISSION.md](SUBMISSION.md) + submit at cerebralvalley.ai before **12:00 Sun**
 
 ## 6 · 60-second demo script
 

@@ -438,7 +438,11 @@
   // ---------- fleet dispatch ----------
   let fleetTimer = null, chosenWorker = '';
   function presClass(w) {
-    if (w.kind === 'external') return w.presence === 'absent' ? 'off' : 'warn';
+    if (w.kind === 'external') {
+      if (w.presence === 'ready') return 'ok';
+      if (w.presence === 'absent') return 'off';
+      return 'warn';
+    }
     return /available|ok|ready/i.test(w.presence) ? 'ok' : /unknown/i.test(w.presence) ? 'warn' : 'off';
   }
   async function loadFleet(first) {
