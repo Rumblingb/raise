@@ -37,7 +37,7 @@ const MIME = {
 
 function send(res, code, body, type = 'application/json') {
   const data = type === 'application/json' ? JSON.stringify(body) : body;
-  res.writeHead(code, { 'content-type': type + '; charset=utf-8', 'cache-control': 'no-store' });
+  res.writeHead(code, { 'content-type': type + '; charset=utf-8', 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
   res.end(data);
 }
 
